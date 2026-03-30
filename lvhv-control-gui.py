@@ -63,7 +63,7 @@ class App(tk.Tk):
         self.Draw()
 
         # initiate update loop
-        self.after(100, self.update_loop)
+        self.after(10, self.update_loop)
 
     def establish_connections(self, subconfigs, header):
         def connect_and_append(subconfig, header, i, out):
@@ -99,13 +99,14 @@ class App(tk.Tk):
         self.frame.pack(fill='both', expand=True)
 
     def update_loop(self):
-        try:
-            tups = self.queue.get_nowait()
-            for f,w in tups:
-                f(w)
-        except pyqueue.Empty:
-            pass
-        self.after(10, self.update_loop)
+        while True:
+            try:
+                tups = self.queue.get_nowait()
+                for f,w in tups:
+                    f(w)
+            except pyqueue.Empty:
+                break
+        self.after(100, self.update_loop)
 
 def power_on(connection, channels):
     for channel in channels:
@@ -124,6 +125,8 @@ def power_off(connection, channels):
 def query_power(connection, channel):
     voltage = connection.QueryPowerVoltage(channel)
     rv = (40.0 < voltage)
+    if voltage < -50.0:
+        rv = None
     return rv
 
 class Row(ttk.Frame):
@@ -163,11 +166,18 @@ class PowerControlButton(ttk.Button):
         self.call = call
         self.color = color
         self.dots = dots
-        super().__init__(parent, text=text, command=self.press)
+        super().__init__(parent, text=text, command=self.spawn_press)
 
     def press(self):
         self.call()
         self.dots.push_recolor(self.color)
+
+    def spawn_press(self):
+        thread = threading.Thread(daemon=False,
+                                  target=self.press,
+                                  args=()
+                                 )
+        thread.start()
 
 class Dots(ttk.Frame):
     def __init__(self, parent, queue, connection):
@@ -197,7 +207,9 @@ def poll_power_on(dot, interval):
     stop = False
     while not stop:
         is_on = query_power(dot.connection, dot.channel)
-        if is_on:
+        if is_on is None:
+            dot.push_recolor('yellow')
+        elif is_on:
             dot.push_recolor('green')
         else:
             dot.push_recolor('red')
@@ -238,8 +250,15 @@ class Dot(tk.Canvas):
             self.push_recolor('red')
             power_off(self.connection, [self.channel])
 
+    def spawn_toggle(self):
+        thread = threading.Thread(daemon=False,
+                                  target=self.toggle,
+                                  args=()
+                                 )
+        thread.start()
+
     def _on_click(self, event):
-        self.toggle()
+        self.spawn_toggle()
 
 def ssh_tunnel(host, local_port, remote_port):
     cli = 'ssh -NL %d:localhost:%d %s' % (local_port, remote_port, host)
