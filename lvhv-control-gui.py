@@ -3,6 +3,7 @@
 # March 2026
 
 import argparse
+import functools
 import json
 import queue as pyqueue
 import subprocess as sp
@@ -12,6 +13,26 @@ import tkinter as tk
 import tkinter.constants as tkc
 from tkinter import ttk
 from PowerSupplyServerConnection import PowerSupplyServerConnection
+
+# thank you, AI :)
+def threadsafe(cls):
+    for name in dir(cls):
+        attr = getattr(cls, name)
+        if callable(attr) and not name.startswith("__"):
+            @functools.wraps(attr)
+            def wrapper(self, *args, __attr=attr, **kwargs):
+                self._lock.acquire()
+                rv = __attr(self, *args, **kwargs)
+                self._lock.release()
+                return rv
+            setattr(cls, name, wrapper)
+    return cls
+
+@threadsafe
+class ThreadSafePowerSupplyServerConnection(PowerSupplyServerConnection):
+    def __init__(self, *args, **kwargs):
+        self._lock = threading.RLock()
+        super().__init__(*args, **kwargs)
 
 class ThreadSafeList(list):
     def __init__(self):
@@ -100,6 +121,11 @@ def power_off(connection, channels):
             print('Channel %d off' % channel)
             connection.DisableLowVoltage(channel)
 
+def query_power(connection, channel):
+    voltage = connection.QueryPowerVoltage(channel)
+    rv = (40.0 < voltage)
+    return rv
+
 class Row(ttk.Frame):
     def __init__(self, parent, queue, subconfig, connection):
         super().__init__(parent)
@@ -167,6 +193,16 @@ class Dots(ttk.Frame):
         tups = [(f,dot) for dot in self.dots]
         self.queue.put_nowait(tups)
 
+def poll_power_on(dot, interval):
+    stop = False
+    while not stop:
+        is_on = query_power(dot.connection, dot.channel)
+        if is_on:
+            dot.push_recolor('green')
+        else:
+            dot.push_recolor('red')
+        sleep(interval)
+
 class Dot(tk.Canvas):
     def __init__(self, parent, queue, connection, channel, color, size):
         super().__init__(parent, width=size, height=size, highlightthickness=0)
@@ -177,19 +213,29 @@ class Dot(tk.Canvas):
         self.color = color
 
         self.bind('<Button-1>', self._on_click)
+        self.begin_polling(1.0)
 
     def recolor(self, color):
         self.itemconfig(self.item, fill=color)
         self.color = color
 
+    def push_recolor(self, color):
+        f = lambda w: w.recolor(color)
+        self.queue.put_nowait(((f, self),))
+
+    def begin_polling(self, interval):
+        thread = threading.Thread(daemon=False,
+                                  target=poll_power_on,
+                                  args=(self, interval)
+                                 )
+        thread.start()
+
     def toggle(self):
         if self.color == 'red':
-            f = lambda w: w.recolor('green')
-            self.queue.put_nowait(((f, self),))
+            self.push_recolor('green')
             power_on(self.connection, [self.channel])
         elif self.color == 'green':
-            f = lambda w: w.recolor('red')
-            self.queue.put_nowait(((f, self),))
+            self.push_recolor('red')
             power_off(self.connection, [self.channel])
 
     def _on_click(self, event):
@@ -224,7 +270,7 @@ def connect_to(subconfig, header, offset):
         thread.start()
         sleep(3.0)
 
-    rv = PowerSupplyServerConnection(host, port, header)
+    rv = ThreadSafePowerSupplyServerConnection(host, port, header)
     return rv
 
 def main(args):
