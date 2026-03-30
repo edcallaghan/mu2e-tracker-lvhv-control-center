@@ -232,8 +232,9 @@ class Dot(tk.Canvas):
         self.color = color
 
     def push_recolor(self, color):
-        f = lambda w: w.recolor(color)
-        self.queue.put_nowait(((f, self),))
+        if color != self.color:
+            f = lambda w: w.recolor(color)
+            self.queue.put_nowait(((f, self),))
 
     def begin_polling(self, interval):
         thread = threading.Thread(daemon=False,
