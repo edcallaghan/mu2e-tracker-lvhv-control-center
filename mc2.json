@@ -1,0 +1,88 @@
+{
+    "connections": [
+        {
+            "slot": 0,
+         "station": 13,
+            "host": "psu0",
+            "port": 12000,
+          "tunnel": true
+        },
+        {
+            "slot": 1,
+         "station": 12,
+            "host": "psu1",
+            "port": 12000,
+          "tunnel": true
+        },
+        {
+            "slot": 2,
+         "station": 16,
+            "host": "psu2",
+            "port": 12000,
+          "tunnel": true
+        },
+        {
+            "slot": 3,
+         "station": 10,
+            "host": "psu3",
+            "port": 12000,
+          "tunnel": true
+        },
+        {
+            "slot": 4,
+         "station": 11,
+            "host": "psu4",
+            "port": 12000,
+          "tunnel": true
+        },
+        {
+            "slot": 5,
+         "station": 1,
+            "host": "psu5",
+            "port": 12000,
+          "tunnel": true
+        },
+        {
+            "slot": 6,
+         "station": 8,
+            "host": "psu6",
+            "port": 12000,
+          "tunnel": true
+        },
+        {
+            "slot": 7,
+         "station": 7,
+            "host": "psu7",
+            "port": 12000,
+          "tunnel": true
+        },
+        {
+            "slot": 8,
+         "station": 0,
+            "host": "psu8",
+            "port": 12000,
+          "tunnel": true
+        },
+        {
+            "slot": 10,
+         "station": 14,
+            "host": "psu14",
+            "port": 12000,
+          "tunnel": true
+        },
+        {
+            "slot": 11,
+         "station": 5,
+            "host": "psu13",
+            "port": 12000,
+          "tunnel": true
+        },
+        {
+            "slot": 12,
+         "station": 4,
+            "host": "psu15",
+            "port": 12000,
+          "tunnel": true
+        }
+    ]
+}
