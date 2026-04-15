@@ -45,29 +45,38 @@ class ThreadSafeList(list):
         self.lock.release()
 
 class App(tk.Tk):
-    def __init__(self, config, header, queue):
+    def __init__(self, config, header, offset, queue):
         super().__init__()
         self.queue = queue
 
         # connect to all power supplies
-        self.connections = self.establish_connections(config['connections'], header)
+        self.connections = self.establish_connections(config['connections'], header, offset)
 
         # set up actual gui
-        self.frame = ttk.Frame(self, relief=tkc.RIDGE, borderwidth=2)
-        self.frame.pack(fill=tkc.BOTH, expand=1)
-
         self.title('Tracker LVHV Control Center')
-        self.geometry('640x360+0+0')
+        #self.geometry('640x360+0+0')
+        self.geometry('960x540+0+0')
         self.bind('q', lambda event: self.destroy())
 
-        self.Draw()
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill=tkc.BOTH, expand=True)
+
+        self.lv_frame = ttk.Frame(self.notebook, relief=tkc.RIDGE, borderwidth=2)
+        self.lv_frame.pack(fill=tkc.BOTH, expand=True)
+        self.DrawLV()
+        self.notebook.add(self.lv_frame, text='LV')
+
+        self.hv_frame = ttk.Frame(self.notebook)
+        self.hv_frame.pack(fill=tkc.BOTH, expand=True)
+        self.DrawHV()
+        self.notebook.add(self.hv_frame, text='HV')
 
         # initiate update loop
         self.after(10, self.update_loop)
 
-    def establish_connections(self, subconfigs, header):
+    def establish_connections(self, subconfigs, header, offset):
         def connect_and_append(subconfig, header, i, out):
-            connection = connect_to(subconfig, header, i)
+            connection = connect_to(subconfig, header, offset + i)
             out.append((subconfig, connection))
         connections = ThreadSafeList()
         threads = []
@@ -90,13 +99,21 @@ class App(tk.Tk):
         rv = sorted(connections, key=lambda pair: pair[0]['slot'])
         return rv
 
-    def Draw(self):
-        self.rows = [Row(self.frame, self.queue, *tup)
+    def DrawLV(self):
+        self.lv_rows = [RowLV(self.lv_frame, self.queue, *tup)
                         for tup in self.connections]
-        for i,row in enumerate(self.rows):
+        for i,row in enumerate(self.lv_rows):
             row.grid(row=i, column=0, sticky='nsew')
-        self.frame.columnconfigure(0, weight=1)
-        self.frame.pack(fill='both', expand=True)
+        self.lv_frame.columnconfigure(0, weight=1)
+        self.lv_frame.pack(fill='both', expand=True)
+
+    def DrawHV(self):
+        self.hv_rows = [RowHV(self.hv_frame, self.queue, *tup)
+                        for tup in self.connections]
+        for i,row in enumerate(self.hv_rows):
+            row.grid(row=i, column=0, sticky='nsew')
+        self.hv_frame.columnconfigure(0, weight=1)
+        self.hv_frame.pack(fill='both', expand=True)
 
     def update_loop(self):
         while True:
@@ -129,7 +146,7 @@ def query_power(connection, channel):
         rv = None
     return rv
 
-class Row(ttk.Frame):
+class RowLV(ttk.Frame):
     def __init__(self, parent, queue, subconfig, connection):
         super().__init__(parent)
         self.queue = queue
@@ -160,6 +177,176 @@ class Row(ttk.Frame):
     def push_grid(self, widget):
         widget.grid(row=0, column=self.columns)
         self.columns += 1
+
+class RowHV(ttk.Frame):
+    def __init__(self, parent, queue, subconfig, connection):
+        super().__init__(parent)
+        self.queue = queue
+        self.connection = connection
+        self.columns = 0
+
+        self.slot    = ttk.Label(self,
+                                 text='Slot %02d' % subconfig['slot'])
+        self.station = ttk.Label(self,
+                                 text='Station %02d' % subconfig['station'])
+        self.host    = ttk.Label(self,
+                                 text='%s' % subconfig['host'],
+                                 anchor='e')
+        checkbox_labels = ['%d' % i for i in range(12)]
+        self.checkboxes = Checkboxes(self, self.queue, checkbox_labels)
+        self.setpoint = SetpointEntry(self)
+        self.button = RampButton(self, 'Ramp', connection, self.checkboxes, self.setpoint)
+
+        self.columnconfigure(1, weight=1)
+        self.push_grid(self.slot)
+        self.push_grid(self.station)
+        self.push_grid(self.host)
+        self.push_grid(self.checkboxes)
+        self.push_grid(self.setpoint)
+        self.push_grid(self.button)
+
+    def push_grid(self, widget):
+        widget.grid(row=0, column=self.columns)
+        self.columns += 1
+
+class Checkboxes(ttk.Frame):
+    def __init__(self, parent, queue, labels):
+        super().__init__(parent)
+        self.columnconfigure(1, weight=1)
+        self.widgets = []
+        self.columns = 0
+        for label in labels:
+            widget = Checkbox(self, queue, label)
+            self.push_grid(widget)
+            self.widgets.append(widget)
+
+    def push_grid(self, widget):
+        widget.grid(row=0, column=self.columns)
+        self.columns += 1
+
+class Checkbox(ttk.Checkbutton):
+    def __init__(self, parent, queue, label):
+        self.variable = tk.BooleanVar()
+        super().__init__(parent, text=label, variable=self.variable)
+
+class SetpointEntry(ttk.Entry):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.insert(0, '12.0')
+
+    def Get(self):
+        text = self.get()
+        rv = None
+        try:
+            rv = float(text)
+        except Exception as e:
+            print('setpoint exception: %s' % str(e))
+            rv = None
+
+        if rv is not None:
+            if rv < 0.0:
+                print('invalid setpoint: %f' % rv)
+                rv = None
+            elif 1450.0 < rv:
+                print('invalid setpoint: %f' % rv)
+                rv = None
+
+        return rv
+
+class RampButton(ttk.Button):
+    def __init__(self, parent, text, connection, checkboxes, setpoint):
+        self.reference_connection = connection
+        self.checkboxes = checkboxes.widgets
+        self.setpoint = setpoint
+        super().__init__(parent, text=text, command=self.spawn_press)
+
+    def ramp(self, connection, channel, voltage):
+        print('Ramping channel %d to %.1f V' % (channel, voltage))
+        connection.SetWireVoltage(channel, voltage)
+
+    def press(self):
+        channels = []
+        i = 0
+        for i,checkbox in enumerate(self.checkboxes):
+            if checkbox.variable.get():
+                channels.append(i)
+
+        host = self.reference_connection.host
+        port = self.reference_connection.port
+        header = self.reference_connection.header
+        voltage = self.setpoint.Get()
+
+        if voltage is None:
+            print('No setpoint, ramp aborted')
+            return # TODO notify of problem
+
+
+        set_voltage = lambda *args: self.ramp(*args)
+        connections = []
+        threads = []
+        for channel in channels:
+            connection = PowerSupplyServerConnection(host, port, header)
+            connections.append(connection)
+            thread = threading.Thread(daemon=False,
+                                      target=set_voltage,
+                                      args=(connection, channel, voltage),
+                                     )
+            threads.append(thread)
+
+        for thread in threads:
+            thread.start()
+
+        done = False
+        while not done and 0 < len(threads):
+            for thread in threads:
+                thread.join(timeout=0.1)
+                if thread.is_alive():
+                    done &= False
+                else:
+                    done &= True
+                    threads.remove(thread)
+
+        for connection in connections:
+            connection.close()
+
+    def spawn_press(self):
+        # TODO disable button while ramp in progress, enable cancel
+        thread = threading.Thread(daemon=False,
+                                  target=self.press,
+                                  args=()
+                                 )
+        thread.start()
+
+# ---
+
+def main(args):
+    if len(args.channels) < 1:
+        raise Exception('supply channels (-c)')
+
+    threads = []
+    for channel in args.channels:
+        supply = PowerSupplyServerConnection(args.host, args.port, args.header)
+        thread = threading.Thread(name='Channel %d' % channel,
+                                  daemon=True,
+                                  target=set_voltage,
+                                  args=(supply,channel,args.voltage),
+                                 )
+        threads.append(thread)
+
+    for thread in threads:
+        thread.start()
+
+    done = False
+    while not done and 0 < len(threads):
+        for thread in threads:
+            thread.join(timeout=0.1)
+            if thread.is_alive():
+                done &= False
+            else:
+                done &= True
+                threads.remove(thread)
+
+# ---
 
 class PowerControlButton(ttk.Button):
     def __init__(self, parent, text, call, color, dots):
@@ -296,7 +483,7 @@ def connect_to(subconfig, header, offset):
 def main(args):
     config = load_config(args.cpath)
     queue = pyqueue.Queue()
-    app = App(config, args.header, queue)
+    app = App(config, args.header, args.offset, queue)
     app.mainloop()
     exit(0)
 
@@ -304,6 +491,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', type=str, dest='cpath', required=True)
     parser.add_argument('--header', type=str, dest='header', required=True)
+    parser.add_argument('--port-offset', type=int, dest='offset', default=0)
 
     args = parser.parse_args()
     main(args)
