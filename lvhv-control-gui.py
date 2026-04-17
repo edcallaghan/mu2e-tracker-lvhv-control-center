@@ -81,7 +81,7 @@ class App(tk.Tk):
         connections = ThreadSafeList()
         threads = []
         for i,subconfig in enumerate(subconfigs):
-            thread = threading.Thread(daemon=False,
+            thread = threading.Thread(daemon=True,
                                       target=connect_and_append,
                                       args=(subconfig, header, i, connections)
                                      )
@@ -273,14 +273,15 @@ class RampableButton(ttk.Button):
         host = reference_connection.host
         port = reference_connection.port
         header = reference_connection.header
+        cpath = reference_connection.dac_calibration_path
 
         set_voltage = lambda *args: self.transition(*args)
         connections = []
         threads = []
         for channel in channels:
-            connection = PowerSupplyServerConnection(host, port, header)
+            connection = PowerSupplyServerConnection(host, port, header, cpath)
             connections.append(connection)
-            thread = threading.Thread(daemon=False,
+            thread = threading.Thread(daemon=True,
                                       target=set_voltage,
                                       args=(connection, channel, voltage),
                                      )
@@ -320,7 +321,7 @@ class RampButton(RampableButton):
 
     def spawn_press(self):
         # TODO disable button while ramp in progress, enable cancel
-        thread = threading.Thread(daemon=False,
+        thread = threading.Thread(daemon=True,
                                   target=self.press,
                                   args=()
                                  )
@@ -336,7 +337,8 @@ class DownButton(RampableButton):
         host = self.reference_connection.host
         port = self.reference_connection.port
         header = self.reference_connection.header
-        connection = PowerSupplyServerConnection(host, port, header)
+        cpath = self.reference_connection.dac_calibration_path
+        connection = PowerSupplyServerConnection(host, port, header, cpath)
         for i,checkbox in enumerate(self.checkboxes):
             if checkbox.variable.get():
                 connection._set_hv_by_dac(i, 0)
@@ -347,7 +349,7 @@ class DownButton(RampableButton):
 
     def spawn_press(self):
         # TODO disable button while ramp in progress, enable cancel
-        thread = threading.Thread(daemon=False,
+        thread = threading.Thread(daemon=True,
                                   target=self.press,
                                   args=()
                                  )
@@ -365,7 +367,7 @@ class PowerControlButton(ttk.Button):
         self.dots.push_recolor(self.color)
 
     def spawn_press(self):
-        thread = threading.Thread(daemon=False,
+        thread = threading.Thread(daemon=True,
                                   target=self.press,
                                   args=()
                                  )
@@ -429,7 +431,7 @@ class Dot(tk.Canvas):
             self.queue.put_nowait(((f, self),))
 
     def begin_polling(self, interval):
-        thread = threading.Thread(daemon=False,
+        thread = threading.Thread(daemon=True,
                                   target=poll_power_on,
                                   args=(self, interval)
                                  )
@@ -444,7 +446,7 @@ class Dot(tk.Canvas):
             power_off(self.connection, [self.channel])
 
     def spawn_toggle(self):
-        thread = threading.Thread(daemon=False,
+        thread = threading.Thread(daemon=True,
                                   target=self.toggle,
                                   args=()
                                  )
@@ -475,14 +477,18 @@ def connect_to(subconfig, header, offset):
         port = local_port
 
         thread = threading.Thread(name='%s tunnel' % remote,
-                                  daemon=False,
+                                  daemon=True,
                                   target=ssh_tunnel,
                                   args=(remote, local_port, remote_port)
                                  )
         thread.start()
         sleep(3.0)
 
-    rv = ThreadSafePowerSupplyServerConnection(host, port, header)
+    cpath = None
+    if 'calibration' in subconfig.keys():
+        cpath = subconfig['calibration']
+
+    rv = ThreadSafePowerSupplyServerConnection(host, port, header, cpath)
     return rv
 
 def main(args):
