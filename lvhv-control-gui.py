@@ -160,7 +160,7 @@ class RowLV(ttk.Frame):
         self.host    = ttk.Label(self,
                                  text='%s' % subconfig['host'],
                                  anchor='e')
-        self.dots = Dots(self, self.queue, self.connection)
+        self.dots = DotsLV(self, self.queue, self.connection)
         on = lambda: power_on(self.connection, range(6))
         off = lambda: power_off(self.connection, [])
         self.on_button  = PowerControlButton(self, 'On', on, 'green', self.dots)
@@ -379,7 +379,7 @@ class PowerControlButton(ttk.Button):
                                  )
         thread.start()
 
-class Dots(ttk.Frame):
+class DotsLV(ttk.Frame):
     def __init__(self, parent, queue, connection):
         super().__init__(parent)
         self.queue = queue
@@ -388,7 +388,7 @@ class Dots(ttk.Frame):
 
         self.dots = []
         for i in range(6):
-            dot = Dot(self, self.queue, self.connection, i, 'red', 16)
+            dot = DotLV(self, self.queue, self.connection, i, 'red', 16)
             self.dots.append(dot)
 
         for dot in self.dots:
@@ -415,7 +415,7 @@ def poll_power_on(dot, interval):
             dot.push_recolor('red')
         sleep(interval)
 
-class Dot(tk.Canvas):
+class DotLV(tk.Canvas):
     def __init__(self, parent, queue, connection, channel, color, size):
         super().__init__(parent, width=size, height=size, highlightthickness=0)
         self.queue = queue
@@ -483,7 +483,7 @@ def connect_to(subconfig, header, offset):
         port = local_port
 
         thread = threading.Thread(name='%s tunnel' % remote,
-                                  daemon=True,
+                                  daemon=False,
                                   target=ssh_tunnel,
                                   args=(remote, local_port, remote_port)
                                  )
