@@ -183,6 +183,7 @@ class RowHV(ttk.Frame):
         super().__init__(parent)
         self.queue = queue
         self.connection = connection
+        self.rows = 0
         self.columns = 0
 
         self.slot    = ttk.Label(self,
@@ -197,6 +198,7 @@ class RowHV(ttk.Frame):
         self.setpoint = SetpointEntry(self)
         self.ramp_button = RampButton(self, 'Ramp', connection, self.checkboxes, self.setpoint)
         self.down_button = DownButton(self, 'Down', connection, self.checkboxes)
+        self.dots = DotsHV(self, self.queue, self.connection)
 
         self.columnconfigure(1, weight=1)
         self.push_grid(self.slot)
@@ -206,9 +208,13 @@ class RowHV(ttk.Frame):
         self.push_grid(self.setpoint)
         self.push_grid(self.ramp_button)
         self.push_grid(self.down_button)
+        self.push_grid(self.dots, new_row=False)
 
-    def push_grid(self, widget):
-        widget.grid(row=0, column=self.columns)
+    def push_grid(self, widget, new_row=False):
+        if new_row:
+            self.rows += 1
+            self.columns = 0
+        widget.grid(row=self.rows, column=self.columns)
         self.columns += 1
 
 class Checkboxes(ttk.Frame):
@@ -216,14 +222,21 @@ class Checkboxes(ttk.Frame):
         super().__init__(parent)
         self.columnconfigure(1, weight=1)
         self.widgets = []
+        self.rows = 0
         self.columns = 0
-        for label in labels:
+        for i,label in enumerate(labels):
+            new_row = False
+            if i == 6:
+                new_row = True
             widget = Checkbox(self, queue, label)
-            self.push_grid(widget)
+            self.push_grid(widget, new_row=new_row)
             self.widgets.append(widget)
 
-    def push_grid(self, widget):
-        widget.grid(row=0, column=self.columns)
+    def push_grid(self, widget, new_row=False):
+        if new_row:
+            self.rows += 1
+            self.columns = 0
+        widget.grid(row=self.rows, column=self.columns)
         self.columns += 1
 
 class Checkbox(ttk.Checkbutton):
@@ -398,7 +411,7 @@ class DotsLV(ttk.Frame):
         widget.grid(row=0, column=self.columns)
         self.columns += 1
 
-    def push_recolor(self, color): 
+    def push_recolor(self, color):
         f = lambda w: w.recolor(color)
         tups = [(f,dot) for dot in self.dots]
         self.queue.put_nowait(tups)
@@ -450,6 +463,119 @@ class DotLV(tk.Canvas):
         elif self.color == 'green':
             self.push_recolor('red')
             power_off(self.connection, [self.channel])
+
+    def spawn_toggle(self):
+        thread = threading.Thread(daemon=True,
+                                  target=self.toggle,
+                                  args=()
+                                 )
+        thread.start()
+
+    def _on_click(self, event):
+        self.spawn_toggle()
+
+def query_hv_trip_status(connection, channel):
+    rv = None
+    try:
+        tripped = connection.QueryTripStatus(channel)
+        if tripped:
+            rv = True
+        else:
+            rv = False
+    except Exception as e:
+        pass
+    return rv
+
+class DotsHV(ttk.Frame):
+    def __init__(self, parent, queue, connection):
+        super().__init__(parent)
+        self.queue = queue
+        self.connection = connection
+        self.rows = 0
+        self.columns = 0
+
+        self.dots = []
+        for i in range(12):
+            dot = DotHV(self, self.queue, self.connection, i, 'red', 16)
+            self.dots.append(dot)
+
+        for i,dot in enumerate(self.dots):
+            new_row=False
+            if i == 6:
+                new_row = True
+            self.push_grid(dot, new_row=new_row)
+
+    def push_grid(self, widget, new_row=False):
+        if new_row:
+            self.rows += 1
+            self.columns = 0
+        widget.grid(row=self.rows, column=self.columns)
+        self.columns += 1
+
+    def push_recolor(self, color):
+        f = lambda w: w.recolor(color)
+        tups = [(f,dot) for dot in self.dots]
+        self.queue.put_nowait(tups)
+
+def poll_hv_trip_status(dot, interval):
+    stop = False
+    while not stop:
+        is_tripped = query_hv_trip_status(dot.connection, dot.channel)
+        if is_tripped is None:
+            dot.push_recolor('yellow')
+        elif is_tripped:
+            dot.push_recolor('red')
+        else:
+            dot.push_recolor('green')
+        sleep(interval)
+
+def zero_dac_and_reset_trip(connection, channels):
+    for channel in channels:
+        print('Reset trip channel %d' % channel)
+        connection._set_hv_by_dac(channel, 0)
+        sleep(1.0)
+        connection.ResetTripStatus(channel)
+
+class DotHV(tk.Canvas):
+    def __init__(self, parent, queue, connection, channel, color, size):
+        super().__init__(parent, width=size, height=size, highlightthickness=0)
+        self.queue = queue
+        self.connection = connection
+        self.channel = channel
+        self.item = self.create_oval(2, 2, size-2, size-2, fill=color, outline='')
+        self.color = color
+
+        self.bind('<Button-1>', self._on_click)
+        self.begin_polling(1.0)
+
+    def recolor(self, color):
+        self.itemconfig(self.item, fill=color)
+        self.color = color
+
+    def push_recolor(self, color):
+        if color != self.color:
+            f = lambda w: w.recolor(color)
+            self.queue.put_nowait(((f, self),))
+
+    def begin_polling(self, interval):
+        thread = threading.Thread(daemon=True,
+                                  target=poll_hv_trip_status,
+                                  args=(self, interval)
+                                 )
+        thread.start()
+
+    def toggle(self):
+        if self.color == 'red':
+            self.push_recolor('green')
+            zero_dac_and_reset_trip(self.connection, [self.channel])
+        elif self.color == 'green':
+            # TODO force trip
+            '''
+
+            self.push_recolor('red')
+            force_trip(self.connection, [self.channel])
+            '''
+            pass
 
     def spawn_toggle(self):
         thread = threading.Thread(daemon=True,
