@@ -232,11 +232,14 @@ class Checkboxes(ttk.Frame):
             self.push_grid(widget, new_row=new_row)
             self.widgets.append(widget)
 
+        for i in range(6):
+            self.columnconfigure(i, weight=1, uniform='checks')
+
     def push_grid(self, widget, new_row=False):
         if new_row:
             self.rows += 1
             self.columns = 0
-        widget.grid(row=self.rows, column=self.columns)
+        widget.grid(row=self.rows, column=self.columns, sticky='w')
         self.columns += 1
 
 class Checkbox(ttk.Checkbutton):
