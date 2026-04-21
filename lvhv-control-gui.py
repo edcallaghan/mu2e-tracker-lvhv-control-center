@@ -245,6 +245,7 @@ class Checkboxes(ttk.Frame):
 class Checkbox(ttk.Checkbutton):
     def __init__(self, parent, queue, label):
         self.variable = tk.BooleanVar()
+        self.variable.set(True)
         super().__init__(parent, text=label, variable=self.variable)
 
 class SetpointEntry(ttk.Entry):
