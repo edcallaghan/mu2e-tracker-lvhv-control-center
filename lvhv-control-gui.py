@@ -263,6 +263,12 @@ class RampableButton(ttk.Button):
         print('Ramping channel %d to %.1f V' % (channel, voltage))
         connection.SetWireVoltage(channel, voltage)
 
+    def conditional_transition(self, connection, channel, voltage):
+        tripped = connection.QueryTripStatus(channel)
+        if tripped:
+            return
+        self.transition(connection, channel, voltage)
+
     def ramp(self, reference_connection, checkboxes, voltage):
         channels = []
         i = 0
@@ -275,7 +281,7 @@ class RampableButton(ttk.Button):
         header = reference_connection.header
         cpath = reference_connection.dac_calibration_path
 
-        set_voltage = lambda *args: self.transition(*args)
+        set_voltage = lambda *args: self.conditional_transition(*args)
         connections = []
         threads = []
         for channel in channels:
