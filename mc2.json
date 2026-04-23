@@ -5,84 +5,144 @@
          "station": 13,
             "host": "psu0",
             "port": 12000,
-          "tunnel": true
+          "tunnel": true,
+     "calibration": "./dac/psu0-measured-hv-dac-calibration.json"
         },
         {
             "slot": 1,
          "station": 12,
             "host": "psu1",
             "port": 12000,
-          "tunnel": true
+          "tunnel": true,
+     "calibration": "./dac/psu1-measured-hv-dac-calibration.json"
         },
         {
             "slot": 2,
          "station": 16,
             "host": "psu2",
             "port": 12000,
-          "tunnel": true
+          "tunnel": true,
+     "calibration": "./dac/psu2-measured-hv-dac-calibration.json"
         },
         {
             "slot": 3,
          "station": 10,
             "host": "psu3",
             "port": 12000,
-          "tunnel": true
+          "tunnel": true,
+     "calibration": "./dac/psu3-measured-hv-dac-calibration.json"
         },
         {
             "slot": 4,
          "station": 11,
             "host": "psu4",
             "port": 12000,
-          "tunnel": true
+          "tunnel": true,
+     "calibration": "./dac/psu4-measured-hv-dac-calibration.json"
         },
         {
             "slot": 5,
          "station": 1,
             "host": "psu5",
             "port": 12000,
-          "tunnel": true
+          "tunnel": true,
+     "calibration": "./dac/psu5-measured-hv-dac-calibration.json"
         },
         {
             "slot": 6,
          "station": 8,
             "host": "psu6",
             "port": 12000,
-          "tunnel": true
+          "tunnel": true,
+     "calibration": "./dac/psu6-measured-hv-dac-calibration.json"
         },
         {
             "slot": 7,
          "station": 7,
             "host": "psu7",
             "port": 12000,
-          "tunnel": true
+          "tunnel": true,
+     "calibration": "./dac/psu7-measured-hv-dac-calibration.json"
         },
         {
             "slot": 8,
          "station": 0,
             "host": "psu8",
             "port": 12000,
-          "tunnel": true
+          "tunnel": true,
+     "calibration": "./dac/psu8-measured-hv-dac-calibration.json"
+        },
+        {
+            "slot": 9,
+         "station": 2,
+            "host": "psu11",
+            "port": 12000,
+          "tunnel": true,
+     "calibration": "./dac/nominal-hv-dac-calibration.json"
         },
         {
             "slot": 10,
          "station": 14,
             "host": "psu14",
             "port": 12000,
-          "tunnel": true
+          "tunnel": true,
+     "calibration": "./dac/psu14-measured-hv-dac-calibration.json"
         },
         {
             "slot": 11,
          "station": 5,
             "host": "psu13",
             "port": 12000,
-          "tunnel": true
+          "tunnel": true,
+     "calibration": "./dac/psu13-measured-hv-dac-calibration.json"
         },
         {
             "slot": 12,
          "station": 4,
             "host": "psu15",
             "port": 12000,
-          "tunnel": true
+          "tunnel": true,
+     "calibration": "./dac/psu15-measured-hv-dac-calibration.json"
+        },
+        {
+            "slot": 13,
+         "station": 17,
+            "host": "psu9",
+            "port": 12000,
+          "tunnel": true,
+     "calibration": "./dac/nominal-hv-dac-calibration.json"
+        },
+        {
+            "slot": 15,
+         "station": 15,
+            "host": "psu12",
+            "port": 12000,
+          "tunnel": true,
+     "calibration": "./dac/nominal-hv-dac-calibration.json"
+        },
+        {
+            "slot": 16,
+         "station": 3,
+            "host": "psu17",
+            "port": 12000,
+          "tunnel": true,
+     "calibration": "./dac/nominal-hv-dac-calibration.json"
+        },
+        {
+            "slot": 14,
+         "station": 6,
+            "host": "psu10",
+            "port": 12000,
+          "tunnel": true,
+     "calibration": "./dac/nominal-hv-dac-calibration.json"
+        },
+        {
+            "slot": 17,
+         "station": 9,
+            "host": "psu16",
+            "port": 12000,
+          "tunnel": true,
+     "calibration": "./dac/nominal-hv-dac-calibration.json"
         }
     ]
 }
