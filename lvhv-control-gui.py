@@ -163,6 +163,8 @@ class RowLV(ttk.Frame):
         self.dots = DotsLV(self, self.queue, self.connection)
         on = lambda: power_on(self.connection, range(6))
         off = lambda: power_off(self.connection, [])
+        self.reset_button = ExternalResetButton(self, 'External reset',
+                                                subconfig['host'])
         self.on_button  = PowerControlButton(self, 'On', on, 'green', self.dots)
         self.off_button = PowerControlButton(self, 'Off', off, 'red', self.dots)
 
@@ -170,6 +172,7 @@ class RowLV(ttk.Frame):
         self.push_grid(self.slot)
         self.push_grid(self.station)
         self.push_grid(self.host)
+        self.push_grid(self.reset_button)
         self.push_grid(self.on_button)
         self.push_grid(self.off_button)
         self.push_grid(self.dots)
@@ -372,6 +375,26 @@ class DownButton(RampableButton):
 
     def spawn_press(self):
         # TODO disable button while ramp in progress, enable cancel
+        thread = threading.Thread(daemon=True,
+                                  target=self.press,
+                                  args=()
+                                 )
+        thread.start()
+
+class ExternalResetButton(ttk.Button):
+    def __init__(self, parent, text, host):
+        self.host = host
+        super().__init__(parent, text=text, command=self.spawn_press)
+
+    def call(self):
+        cli = 'ssh %s frontend-reset' % self.host
+        tok = cli.split(' ')
+        sp.run(tok)
+
+    def press(self):
+        self.call()
+
+    def spawn_press(self):
         thread = threading.Thread(daemon=True,
                                   target=self.press,
                                   args=()
