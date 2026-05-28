@@ -67,8 +67,29 @@ class App(tk.Tk):
         self.notebook.add(self.lv_frame, text='LV')
 
         self.hv_frame = ttk.Frame(self.notebook)
-        self.hv_frame.pack(fill=tkc.BOTH, expand=True)
+        self.hv_canvas = tk.Canvas(self.hv_frame)
+        self.hv_subframe = ttk.Frame(self.hv_canvas)
+        self.hv_window = self.hv_canvas.create_window((0, 0),
+                                                      window=self.hv_subframe,
+                                                      anchor='nw'
+                         )
+        self.hv_canvas.bind('<Configure>',
+            lambda e: self.hv_canvas.itemconfig(self.hv_window, width=e.width)
+        )
+        self.hv_scrollbar = ttk.Scrollbar(self.hv_frame,
+                                          orient='vertical',
+                                          command=self.hv_canvas.yview
+                                         )
+        self.hv_canvas.configure(yscrollcommand=self.hv_scrollbar.set)
         self.DrawHV()
+        self.hv_subframe.bind('<Configure>',
+            lambda e: self.hv_canvas.configure(
+                scrollregion=self.hv_canvas.bbox('all')
+            )
+        )
+        self.hv_scrollbar.pack(side='right', fill='y')
+        self.hv_canvas.pack(fill=tkc.BOTH, expand=True)
+        self.hv_frame.pack(fill=tkc.BOTH, expand=True)
         self.notebook.add(self.hv_frame, text='HV')
 
         # initiate update loop
@@ -108,12 +129,12 @@ class App(tk.Tk):
         self.lv_frame.pack(fill='both', expand=True)
 
     def DrawHV(self):
-        self.hv_rows = [RowHV(self.hv_frame, self.queue, *tup)
+        self.hv_rows = [RowHV(self.hv_subframe, self.queue, *tup)
                         for tup in self.connections]
         for i,row in enumerate(self.hv_rows):
             row.grid(row=i, column=0, sticky='nsew')
-        self.hv_frame.columnconfigure(0, weight=1)
-        self.hv_frame.pack(fill='both', expand=True)
+        self.hv_subframe.columnconfigure(0, weight=1)
+        #self.hv_subframe.pack(fill='both', expand=True)
 
     def update_loop(self):
         while True:
