@@ -76,6 +76,12 @@ class App(tk.Tk):
         self.hv_canvas.bind('<Configure>',
             lambda e: self.hv_canvas.itemconfig(self.hv_window, width=e.width)
         )
+        self.hv_canvas.bind_all('<Button-4>',
+            lambda e: self.hv_canvas.yview_scroll(-1, 'units')
+        )
+        self.hv_canvas.bind_all('<Button-5>',
+            lambda e: self.hv_canvas.yview_scroll(+1, 'units')
+        )
         self.hv_scrollbar = ttk.Scrollbar(self.hv_frame,
                                           orient='vertical',
                                           command=self.hv_canvas.yview
