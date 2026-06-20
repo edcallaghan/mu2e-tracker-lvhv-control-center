@@ -44,6 +44,24 @@ class ThreadSafeList(list):
         super(ThreadSafeList, self).append(item)
         self.lock.release()
 
+    def __len__(self):
+        self.lock.acquire()
+        rv = super(ThreadSafeList, self).__len__()
+        self.lock.release()
+        return rv
+
+    def pop(self, *args, **kwargs):
+        self.lock.acquire()
+        rv = super(ThreadSafeList, self).pop(*args, **kwargs)
+        self.lock.release()
+        return rv
+
+    def clear(self):
+        self.lock.acquire()
+        rv = super(ThreadSafeList, self).clear()
+        self.lock.release()
+        return rv
+
 class App(tk.Tk):
     def __init__(self, config, header, offset, queue):
         super().__init__()
@@ -226,8 +244,10 @@ class RowHV(ttk.Frame):
         checkbox_labels = ['%d' % i for i in range(12)]
         self.checkboxes = Checkboxes(self, self.queue, checkbox_labels)
         self.setpoint = SetpointEntry(self)
-        self.ramp_button = RampButton(self, 'Ramp', connection, self.checkboxes, self.setpoint)
-        self.down_button = DownButton(self, 'Down', connection, self.checkboxes)
+        self.cancels = ThreadSafeList()
+        self.ramp_button = RampButton(self, 'Ramp', connection, self.checkboxes, self.setpoint, self.cancels)
+        self.down_button = DownButton(self, 'Down', connection, self.checkboxes, self.cancels)
+        self.cancel_button = CancelButton(self, 'Cancel', self.cancels)
         self.dots = DotsHV(self, self.queue, self.connection)
 
         self.columnconfigure(1, weight=1)
@@ -239,6 +259,7 @@ class RowHV(ttk.Frame):
         self.push_grid(self.ramp_button)
         self.push_grid(self.down_button)
         self.push_grid(self.dots, new_row=False)
+        self.push_grid(self.cancel_button)
 
     def push_grid(self, widget, new_row=False):
         if new_row:
@@ -304,7 +325,9 @@ class SetpointEntry(ttk.Entry):
 
 class RampableButton(ttk.Button):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        self.cancels = kwargs['cancels']
+        fwds = {k: v for k,v in kwargs.items() if k != 'cancels'}
+        super().__init__(*args, **fwds)
 
     def transition(self, connection, channel, voltage):
         print('Ramping channel %d to %.1f V' % (channel, voltage))
@@ -317,6 +340,8 @@ class RampableButton(ttk.Button):
         self.transition(connection, channel, voltage)
 
     def ramp(self, reference_connection, checkboxes, voltage):
+        self.cancels.clear()
+
         channels = []
         i = 0
         for i,checkbox in enumerate(checkboxes):
@@ -326,14 +351,15 @@ class RampableButton(ttk.Button):
         host = reference_connection.host
         port = reference_connection.port
         header = reference_connection.header
-        cpath = reference_connection.dac_calibration_path
+        #cpath = reference_connection.dac_calibration_path
 
         set_voltage = lambda *args: self.conditional_transition(*args)
         connections = []
         threads = []
         for channel in channels:
-            connection = PowerSupplyServerConnection(host, port, header, cpath)
+            connection = PowerSupplyServerConnection(host, port, header)
             connections.append(connection)
+            self.cancels.append((connection, channel))
             thread = threading.Thread(daemon=True,
                                       target=set_voltage,
                                       args=(connection, channel, voltage),
@@ -356,12 +382,15 @@ class RampableButton(ttk.Button):
         for connection in connections:
             connection.close()
 
+        self.cancels.clear()
+
 class RampButton(RampableButton):
-    def __init__(self, parent, text, connection, checkboxes, setpoint):
+    def __init__(self, parent, text, connection, checkboxes, setpoint, cancels):
         self.reference_connection = connection
         self.checkboxes = checkboxes.widgets
         self.setpoint = setpoint
-        super().__init__(parent, text=text, command=self.spawn_press)
+        super().__init__(parent, text=text, command=self.spawn_press,
+                         cancels=cancels)
 
     def press(self):
         voltage = self.setpoint.Get()
@@ -373,7 +402,6 @@ class RampButton(RampableButton):
             self.ramp(self.reference_connection, self.checkboxes, voltage)
 
     def spawn_press(self):
-        # TODO disable button while ramp in progress, enable cancel
         thread = threading.Thread(daemon=True,
                                   target=self.press,
                                   args=()
@@ -381,24 +409,55 @@ class RampButton(RampableButton):
         thread.start()
 
 class DownButton(RampableButton):
-    def __init__(self, parent, text, connection, checkboxes):
+    def __init__(self, parent, text, connection, checkboxes, cancels):
         self.reference_connection = connection
         self.checkboxes = checkboxes.widgets
-        super().__init__(parent, text=text, command=self.spawn_press)
+        super().__init__(parent, text=text, command=self.spawn_press,
+                         cancels=cancels)
 
     def zero_dacs(self):
         host = self.reference_connection.host
         port = self.reference_connection.port
         header = self.reference_connection.header
-        cpath = self.reference_connection.dac_calibration_path
-        connection = PowerSupplyServerConnection(host, port, header, cpath)
+        #cpath = self.reference_connection.dac_calibration_path
+        connection = PowerSupplyServerConnection(host, port, header)
         for i,checkbox in enumerate(self.checkboxes):
             if checkbox.variable.get():
-                connection._set_hv_by_dac(i, 0)
+                if not connection.GetHVLock(i):
+                    connection._set_hv_by_dac(i, 0)
 
     def press(self):
-        self.ramp(self.reference_connection, self.checkboxes, 50.0)
+        self.ramp(self.reference_connection, self.checkboxes, 20.0)
         self.zero_dacs()
+
+    def spawn_press(self):
+        # TODO disable button while ramp in progress, enable cancel
+        thread = threading.Thread(daemon=True,
+                                  target=self.press,
+                                  args=()
+                                 )
+        thread.start()
+
+class CancelButton(ttk.Button):
+    def __init__(self, parent, text, cancels):
+        super().__init__(parent, text=text, command=self.spawn_press)
+        self.cancels = cancels
+
+    def lock_wait_exit(self, connection, channel, wait):
+        was = connection.GetHVLock(channel)
+        connection.SetHVLock(channel, True)
+        sleep(wait)
+        connection.SetHVLock(channel, was)
+
+    def press(self):
+        while 0 < len(self.cancels):
+            connection, channel = self.cancels.pop(0)
+            target = lambda *args: self.lock_wait_exit(*args)
+            thread = threading.Thread(daemon=True,
+                                      target=target,
+                                      args=(connection, channel, 10.0)
+                                     )
+            thread.start()
 
     def spawn_press(self):
         # TODO disable button while ramp in progress, enable cancel
